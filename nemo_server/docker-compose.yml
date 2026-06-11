@@ -1,0 +1,18 @@
+version: '3.8'
+
+networks:
+  labfiles_net:
+    driver: bridge
+
+services:
+  nemo:
+    build:
+      context: ..           # repo root, so COPY ./plugin works
+      dockerfile: nemo_server/Dockerfile
+    container_name: nemo-server
+    ports:
+      - "8000:8000"
+    environment:
+      - EXTRA_SETTINGS_FILE=/opt/nemo/labfiles_settings.py
+      - LABFILES_DAEMON_URL=http://192.168.1.198:5000
+      - LABFILES_API_KEY=dev_key

@@ -1,0 +1,48 @@
+import logging
+import os
+from flask import Flask
+from daemon.api.routes import routes
+from daemon.modules.session_manager import SessionManager
+from daemon.modules.state_db import StateDB
+from daemon.modules.user_provisioner import UserProvisioner
+from daemon.modules.mount_manager import MountManager
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+)
+logger = logging.getLogger(__name__)
+
+DB_PATH = os.environ.get("LABFILES_DB_PATH", ":memory:")
+BASE_PATH = os.environ.get("LABFILES_BASE_PATH", "/srv/labdata")
+DRY_RUN = os.environ.get("LABFILES_DRY_RUN", "0") == "1"
+
+
+def create_app() -> Flask:
+    app = Flask(__name__)
+
+    app.session_manager = SessionManager()
+    app.state_db = StateDB(db_path=DB_PATH)
+    app.user_provisioner = UserProvisioner(base_path=BASE_PATH, dry_run=DRY_RUN)
+    app.mount_manager = MountManager(base_path=BASE_PATH, dry_run=DRY_RUN)
+
+    _recover_orphaned_sessions(app.state_db, app.session_manager)
+
+    app.register_blueprint(routes)
+    return app
+
+
+def _recover_orphaned_sessions(state_db: StateDB, session_mgr: SessionManager) -> None:
+    orphans = state_db.get_active_sessions()
+    if not orphans:
+        return
+    logger.warning("Recovering %d orphaned session(s) from previous run", len(orphans))
+    for s in orphans:
+        logger.warning("  orphan: user=%s machine=%s status=%s", s["user_id"], s["machine_id"], s["status"])
+        session_mgr.add(s["user_id"], s["machine_id"])
+
+
+app = create_app()
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=5000)

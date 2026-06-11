@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(docker compose *)",
+      "Bash(curl -s http://localhost:5000/health)",
+      "Bash(curl -s -X POST http://localhost:5000/mount -H \"Content-Type: application/json\" -d '{\"user_id\":\"harry\",\"machine_id\":\"microscope1\"}')",
+      "Bash(curl -s -X POST http://localhost:5000/mount -H \"Content-Type: application/json\" -H \"X-API-Key: dev_key\" -d '{\"user_id\":\"../../../etc\",\"machine_id\":\"microscope1\"}')",
+      "Bash(curl -s -X POST http://localhost:5000/mount -H \"Content-Type: application/json\" -H \"X-API-Key: dev_key\" -d '{\"user_id\":\"harry\",\"machine_id\":\"microscope1\",\"session_id\":\"sess_001\"}')",
+      "Bash(curl -s -X POST http://localhost:5000/mount -H \"Content-Type: application/json\" -H \"X-API-Key: dev_key\" -d '{\"user_id\":\"harry\",\"machine_id\":\"microscope2\",\"session_id\":\"sess_002\"}')",
+      "Bash(curl -s -X POST http://localhost:5000/provision -H \"Content-Type: application/json\" -H \"X-API-Key: dev_key\" -d '{\"event\":\"user_created\",\"user_id\":\"harry\",\"full_name\":\"Harry Smith\",\"group_id\":\"woo_lab\"}')",
+      "Bash(curl -s -X POST http://localhost:5000/provision -H \"Content-Type: application/json\" -H \"X-API-Key: dev_key\" -d '{\"user_id\":\"../etc\",\"group_id\":\"woo_lab\"}')",
+      "Bash(curl -s -X POST http://localhost:5000/unmount -H \"Content-Type: application/json\" -H \"X-API-Key: dev_key\" -d '{\"user_id\":\"nobody\",\"machine_id\":\"ghost_machine\"}')",
+      "Bash(curl -s -X POST http://localhost:5000/mount -H \"Content-Type: application/json\" -H \"X-API-Key: dev_key\" -d '{\"user_id\":\"tom\",\"machine_id\":\"microscope2\",\"session_id\":\"s1\"}')",
+      "Bash(curl -s -X POST http://localhost:5000/mount -H \"Content-Type: application/json\" -H \"X-API-Key: dev_key\" -d '{\"user_id\":\"tom\",\"machine_id\":\"microscope2\",\"session_id\":\"s2\"}')",
+      "Bash(curl -s http://localhost:5000/sessions -H \"X-API-Key: dev_key\")",
+      "Bash(curl -s -X POST http://localhost:5000/mount -H \"Content-Type: application/json\" -H \"X-API-Key: dev_key\" -d '{\"user_id\":\"harry\",\"machine_id\":\"microscope1\",\"group_id\":\"woo_lab\",\"session_id\":\"s1\"}')",
+      "Bash(curl -s -X POST http://localhost:5000/unmount -H \"Content-Type: application/json\" -H \"X-API-Key: dev_key\" -d '{\"user_id\":\"harry\",\"machine_id\":\"microscope1\",\"session_id\":\"s1\"}')"
+    ]
+  }
+}
