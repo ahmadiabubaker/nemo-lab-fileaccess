@@ -1212,8 +1212,4 @@ Confirm all of these before or at the kickoff meeting.
 
 ---
 
-*Document version 3.0 — May 2026*  
-*Author: Abubaker Ahmadi, Software Engineering Intern, Princeton PRISM*  
-*Status: Draft — pending answers to Section 18 open questions*  
-*Changes from v1.0: Replaced symlink mechanism with Linux bind mounts. Replaced chmod 700 + wide links with POSIX ACLs for VFS permission correctness. Added SQLite session state persistence for crash recovery. Removed /srv/labdata/shares/ directory. Added /mnt/labsessions/ as transient session mount location. Removed smbcontrol reload-config from mount/unmount flow.*  
-*Changes from v2.0: Added default ACL (setfacl -d) at provisioning to fix file ownership mismatch when machine accounts write files. Added ghost session race condition check in IdleMonitor — thread aborts if session status returns to active before unmount. Added SQLite threading fixes: check_same_thread=False and PRAGMA journal_mode=WAL. Added input sanitization in api/routes.py to prevent path traversal injection.*
+*Document version 3.1 — June 10 2026*  
