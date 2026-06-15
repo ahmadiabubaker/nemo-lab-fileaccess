@@ -36,7 +36,12 @@ def create_app() -> Flask:
     )
     app.session_manager = SessionManager()
     app.state_db = StateDB(db_path=config["sessions"]["db_path"])
-    app.user_provisioner = UserProvisioner(base_path=config["storage"]["base_path"], dry_run=DRY_RUN)
+    app.user_provisioner = UserProvisioner(
+        base_path=config["storage"]["base_path"],
+        quota_soft_mb=config["storage"]["quota_soft_mb"],
+        quota_hard_mb=config["storage"]["quota_hard_mb"],
+        dry_run=DRY_RUN,
+    )
     app.mount_manager = MountManager(
         base_path=config["storage"]["base_path"],
         sessions_path=config["sessions"]["mount_base_path"],
