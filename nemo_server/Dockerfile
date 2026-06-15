@@ -7,4 +7,4 @@ RUN pip install requests pyyaml
 COPY ./plugin /nemo/labfiles_plugin
 
 # Patch INSTALLED_APPS directly into the splash pad settings file
-RUN echo "\nINSTALLED_APPS = INSTALLED_APPS + ['labfiles_plugin']" >> /nemo/splash_pad_settings.py
+RUN echo "\nINSTALLED_APPS = INSTALLED_APPS + ['labfiles_plugin.apps.LabFilesPluginConfig']" >> /nemo/splash_pad_settings.py
