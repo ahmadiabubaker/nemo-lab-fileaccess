@@ -52,11 +52,14 @@ def handle_mount():
     if not data:
         return jsonify({"status": "error", "message": "No JSON body"}), 400
 
+    audit = current_app.audit_logger
+
     try:
         user_id = sanitize_numeric_id(data.get("user_id"), "user_id")
         machine_id = sanitize_machine_id(data.get("machine_id", ""), current_app.allowed_machines)
     except ValueError as e:
         logger.warning("mount rejected: %s", e)
+        audit.log("tool_login", data.get("user_id"), data.get("machine_id"), "mount", "rejected", reason=str(e))
         return jsonify({"status": "error", "message": str(e)}), 400
 
     session_id = data.get("session_id", "")
@@ -77,6 +80,9 @@ def handle_mount():
     if not ok:
         logger.error("mount: filesystem ops failed user=%s machine=%s", user_id, machine_id)
 
+    audit.log("tool_login", user_id, machine_id, "mount", "success" if ok else "error",
+              session_id=session_id, project_ids=project_ids)
+
     logger.info("mount: user=%s machine=%s session=%s", user_id, machine_id, session_id)
     return jsonify({
         "status": "success",
@@ -92,18 +98,21 @@ def handle_unmount():
     if not data:
         return jsonify({"status": "error", "message": "No JSON body"}), 400
 
+    audit = current_app.audit_logger
+
     try:
         user_id = sanitize_numeric_id(data.get("user_id"), "user_id")
         machine_id = sanitize_machine_id(data.get("machine_id", ""), current_app.allowed_machines)
     except ValueError as e:
         logger.warning("unmount rejected: %s", e)
+        audit.log("tool_logout", data.get("user_id"), data.get("machine_id"), "unmount", "rejected", reason=str(e))
         return jsonify({"status": "error", "message": str(e)}), 400
 
     session_id = data.get("session_id", "")
 
     state_db = current_app.state_db
     session_mgr = current_app.session_manager
-    mount_mgr = current_app.mount_manager
+    idle_monitor = current_app.idle_monitor
 
     # Only touch the DB if the session actually exists
     existing = state_db.get_session(user_id, machine_id)
@@ -118,23 +127,18 @@ def handle_unmount():
     all_projects = state_db.get_projects()
     projects = [p for p in all_projects if p["project_id"] in project_ids]
 
-    session_mgr.remove(user_id, machine_id)
-    remaining = session_mgr.get_machines(user_id)
+    # The actual unmount (and session_manager.remove/close_session) runs in a
+    # background thread via IdleMonitor, which waits for active write handles
+    # to clear before unmounting and re-checks for a ghost (re-login) session.
+    idle_monitor.start_unmount(user_id, machine_id, projects)
 
-    machine_account = f"{machine_id}_machine"
-    ok = mount_mgr.unmount(user_id=user_id, machine_id=machine_id,
-                           projects=projects, machine_account=machine_account,
-                           remaining_sessions=remaining)
-    if not ok:
-        logger.error("unmount: filesystem ops failed user=%s machine=%s", user_id, machine_id)
+    audit.log("tool_logout", user_id, machine_id, "unmount", "queued",
+              session_id=session_id, project_ids=project_ids)
 
-    if existing and existing["status"] == "active":
-        state_db.close_session(user_id, machine_id)
-
-    logger.info("unmount: user=%s machine=%s session=%s", user_id, machine_id, session_id)
+    logger.info("unmount: user=%s machine=%s session=%s (unmount queued)", user_id, machine_id, session_id)
     return jsonify({
         "status": "success",
-        "message": f"{user_id} logged out of {machine_id}",
+        "message": f"{user_id} logout from {machine_id} queued",
         "active_sessions": session_mgr.all_sessions(),
     }), 200
 
@@ -146,16 +150,21 @@ def handle_provision():
     if not data:
         return jsonify({"status": "error", "message": "No JSON body"}), 400
 
+    audit = current_app.audit_logger
+
     try:
         user_id = sanitize_numeric_id(data.get("user_id"), "user_id")
     except ValueError as e:
         logger.warning("provision rejected: %s", e)
+        audit.log("provision", data.get("user_id"), None, "provision", "rejected", reason=str(e))
         return jsonify({"status": "error", "message": str(e)}), 400
 
     full_name = data.get("full_name", "")
 
     provisioner = current_app.user_provisioner
     ok = provisioner.provision(user_id=user_id, full_name=full_name)
+
+    audit.log("provision", user_id, None, "provision", "success" if ok else "error", full_name=full_name)
 
     if not ok:
         return jsonify({"status": "error", "message": f"Provisioning failed for {user_id}"}), 500

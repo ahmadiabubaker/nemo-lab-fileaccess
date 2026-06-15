@@ -5,3 +5,4 @@ __pycache__/
 *.db
 .env
 *.sqlite3
+config/config.yaml

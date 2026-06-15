@@ -1,0 +1,17 @@
+daemon:
+  base_url: "https://fileserver-daemon:5443"
+  api_key: "CHANGE_THIS_IN_PRODUCTION"
+  client_cert: "/etc/nemo/labfiles/tls/client.crt"   # for mutual TLS
+  client_key: "/etc/nemo/labfiles/tls/client.key"
+  ca_cert: "/etc/nemo/labfiles/tls/ca.crt"            # to verify the daemon's server cert
+  timeout_seconds: 10
+
+# Maps NemoCE's internal tool_id to this project's machine_id (matches the
+# `machines:` list in the daemon's config/config.yaml).
+tools:
+  - tool_id: "tool_001"
+    machine_id: "microscope1"
+    samba_user: "microscope1_machine"
+  - tool_id: "tool_002"
+    machine_id: "microscope2"
+    samba_user: "microscope2_machine"

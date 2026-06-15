@@ -19,13 +19,14 @@ class NemoSync:
 
     def __init__(self, nemo_api_client, state_db, user_provisioner,
                  base_path: str = "/srv/labdata", on_deactivation: str = "lock_account",
-                 dry_run: bool = False):
+                 dry_run: bool = False, audit_logger=None):
         self.nemo_api_client = nemo_api_client
         self.state_db = state_db
         self.user_provisioner = user_provisioner
         self.base_path = base_path
         self.on_deactivation = on_deactivation
         self.dry_run = dry_run
+        self.audit_logger = audit_logger
 
     # ------------------------------------------------------------------
     # Public API
@@ -105,7 +106,10 @@ class NemoSync:
             if result.returncode != 0:
                 full_name = f"{user.get('first_name', '')} {user.get('last_name', '')}".strip()
                 logger.info("NemoSync: provisioning new user %s (id=%s)", username, user_id)
-                self.user_provisioner.provision(user_id=user_id, full_name=full_name)
+                ok = self.user_provisioner.provision(user_id=user_id, full_name=full_name)
+                if self.audit_logger:
+                    self.audit_logger.log("provision", user_id, None, "nemo_sync_provision",
+                                           "success" if ok else "error", full_name=full_name)
 
             if not user.get("is_active", True):
                 self._handle_deactivated_user(user_id, username)
@@ -114,9 +118,13 @@ class NemoSync:
         if self.on_deactivation == "lock_account":
             self._run(["usermod", "-L", username], check=False)
             logger.info("NemoSync: locked deactivated user %s", username)
+            if self.audit_logger:
+                self.audit_logger.log("nemo_sync", user_id, None, "lock_account", "success", username=username)
         elif self.on_deactivation == "remove_membership_only":
             self.state_db.set_memberships(user_id, [])
             logger.info("NemoSync: cleared memberships for deactivated user %s", username)
+            if self.audit_logger:
+                self.audit_logger.log("nemo_sync", user_id, None, "clear_memberships", "success", username=username)
         elif self.on_deactivation == "ignore":
             pass
         else:
@@ -156,11 +164,17 @@ class NemoSync:
         linux_group = f"proj_{project_id}"
         self._run(["usermod", "-aG", linux_group, username])
         logger.info("NemoSync: added %s to group %s (project %s)", username, linux_group, project_id)
+        if self.audit_logger:
+            self.audit_logger.log("nemo_sync", user_id, None, "add_membership", "success",
+                                   project_id=project_id, linux_group=linux_group)
 
     def _remove_membership(self, user_id: int, project_id: int, linux_group: str, username: str | None = None) -> None:
         username = username or f"u{user_id}"
         self._run(["gpasswd", "-d", username, linux_group], check=False)
         logger.info("NemoSync: removed %s from group %s (project %s)", username, linux_group, project_id)
+        if self.audit_logger:
+            self.audit_logger.log("nemo_sync", user_id, None, "remove_membership", "success",
+                                   project_id=project_id, linux_group=linux_group)
 
     # ------------------------------------------------------------------
     # Helpers

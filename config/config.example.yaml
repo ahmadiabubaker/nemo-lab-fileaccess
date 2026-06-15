@@ -1,0 +1,52 @@
+server:
+  host: "127.0.0.1"        # bind to a single interface, not 0.0.0.0
+  port: 5443
+  api_key_hash: "CHANGE_THIS_IN_PRODUCTION"   # store a hash, not the raw key
+  tls:
+    cert_file: "/etc/labfiles/tls/server.crt"
+    key_file: "/etc/labfiles/tls/server.key"
+    client_ca_file: "/etc/labfiles/tls/client_ca.crt"   # for mutual TLS
+    require_client_cert: true
+
+rate_limiting:
+  default: "60/minute"
+  mount_endpoints: "20/minute"
+
+storage:
+  base_path: "/srv/labdata"
+  quota_soft_mb: 10240     # 10 GB
+  quota_hard_mb: 12288     # 12 GB hard limit
+
+sessions:
+  mount_base_path: "/mnt/labsessions"   # where bind mounts are created
+  db_path: "/var/lib/labfiles/sessions.db"  # SQLite state database
+
+samba:
+  status_command: "smbstatus"
+
+idle_monitor:
+  check_interval_seconds: 5
+  max_idle_timeout_seconds: 30   # ceiling for read-only open handles only;
+                                  # active write handles are never force-unmounted
+
+nemo_sync:
+  api_base_url: "https://nemo.example.edu/api/"
+  api_token: "CHANGE_THIS_IN_PRODUCTION"
+  poll_interval_seconds: 3600     # hourly default; NEMO account/project/membership
+                                   # changes are infrequent (a few per week)
+  on_deactivation: "lock_account" # "lock_account" | "remove_membership_only" | "ignore"
+                                   # policy applied when a NEMO account/project/user
+                                   # is deactivated, deleted, or reactivated
+
+logging:
+  log_path: "/var/log/labfiles/daemon.log"
+  level: "INFO"
+  rotation_days: 30
+
+machines:
+  - id: "microscope1"
+    samba_user: "microscope1_machine"
+    tool_id: "tool_001"      # Nemo CE internal tool ID
+  - id: "microscope2"
+    samba_user: "microscope2_machine"
+    tool_id: "tool_002"
