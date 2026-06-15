@@ -32,6 +32,24 @@ class NemoSync:
     # Public API
     # ------------------------------------------------------------------
 
+    def sync_user_now(self, user_id: int) -> None:
+        """
+        Immediately syncs a single user's project memberships, without
+        waiting for the next poll cycle. Called right after /provision so a
+        brand-new user's group memberships (and any new project dirs/groups
+        they need) are in place before their first tool login.
+        """
+        user = self.nemo_api_client.get_user(user_id)
+
+        accounts = {a["id"]: a for a in self.nemo_api_client.get_accounts()}
+        all_projects = {p["id"]: p for p in self.nemo_api_client.get_projects()}
+        user_projects = {pid: all_projects[pid] for pid in user.get("projects", []) if pid in all_projects}
+
+        self._sync_accounts_and_projects(accounts, user_projects)
+        self._sync_memberships([user])
+
+        logger.info("NemoSync: sync_user_now complete user_id=%s projects=%d", user_id, len(user_projects))
+
     def run_once(self) -> None:
         accounts = {a["id"]: a for a in self.nemo_api_client.get_accounts()}
         projects = {p["id"]: p for p in self.nemo_api_client.get_projects()}

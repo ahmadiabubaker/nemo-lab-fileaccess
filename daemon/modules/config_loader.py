@@ -14,6 +14,7 @@ _ENV_OVERRIDES = {
     "LABFILES_BASE_PATH": ("storage", "base_path"),
     "LABFILES_QUOTA_SOFT_MB": ("storage", "quota_soft_mb"),
     "LABFILES_QUOTA_HARD_MB": ("storage", "quota_hard_mb"),
+    "LABFILES_UID_OFFSET": ("storage", "uid_offset"),
     "LABFILES_SESSIONS_PATH": ("sessions", "mount_base_path"),
     "LABFILES_DB_PATH": ("sessions", "db_path"),
     "LABFILES_SAMBA_STATUS_COMMAND": ("samba", "status_command"),
@@ -32,6 +33,7 @@ _INT_KEYS = {
     "LABFILES_PORT",
     "LABFILES_QUOTA_SOFT_MB",
     "LABFILES_QUOTA_HARD_MB",
+    "LABFILES_UID_OFFSET",
     "LABFILES_IDLE_CHECK_INTERVAL_SECONDS",
     "LABFILES_IDLE_MAX_TIMEOUT_SECONDS",
     "LABFILES_NEMO_SYNC_POLL_INTERVAL_SECONDS",
@@ -58,6 +60,7 @@ DEFAULTS = {
         "base_path": "/srv/labdata",
         "quota_soft_mb": 10240,
         "quota_hard_mb": 12288,
+        "uid_offset": 0,
     },
     "sessions": {
         "mount_base_path": "/mnt/labsessions",

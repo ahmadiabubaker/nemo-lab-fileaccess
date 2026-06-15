@@ -26,6 +26,12 @@ class NemoApiClient:
     def get_users(self) -> list[dict]:
         return self._get_all("users")
 
+    def get_user(self, user_id: int) -> dict:
+        url = f"{self.base_url}/users/{user_id}/"
+        response = self.session.get(url, timeout=self.timeout)
+        response.raise_for_status()
+        return response.json()
+
     def _get_all(self, resource: str) -> list[dict]:
         """
         Fetches all pages of a NEMO list endpoint. NEMO's DRF-style pagination

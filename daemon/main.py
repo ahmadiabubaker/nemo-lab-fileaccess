@@ -40,6 +40,7 @@ def create_app() -> Flask:
         base_path=config["storage"]["base_path"],
         quota_soft_mb=config["storage"]["quota_soft_mb"],
         quota_hard_mb=config["storage"]["quota_hard_mb"],
+        uid_offset=config["storage"]["uid_offset"],
         dry_run=DRY_RUN,
     )
     app.mount_manager = MountManager(
@@ -58,6 +59,7 @@ def create_app() -> Flask:
         audit_logger=app.audit_logger,
     )
 
+    _ensure_machine_accounts(config["machines"], DRY_RUN)
     _recover_orphaned_sessions(app.state_db, app.mount_manager, app.session_manager)
 
     nemo_config = config["nemo_sync"]
@@ -78,6 +80,30 @@ def create_app() -> Flask:
 
     app.register_blueprint(routes)
     return app
+
+
+def _ensure_machine_accounts(machines: list[dict], dry_run: bool) -> None:
+    """Create a Linux system account for each configured machine if it doesn't exist."""
+    import subprocess
+    for machine in machines:
+        samba_user = machine.get("samba_user", "")
+        if not samba_user:
+            continue
+        result = subprocess.run(["id", samba_user], capture_output=True)
+        if result.returncode == 0:
+            logger.info("machine account %s already exists", samba_user)
+            continue
+        if dry_run:
+            logger.info("machine account [DRY RUN]: useradd --system %s", samba_user)
+            continue
+        result = subprocess.run(
+            ["useradd", "--system", "--no-create-home", "--shell", "/usr/sbin/nologin", samba_user],
+            capture_output=True, text=True,
+        )
+        if result.returncode == 0:
+            logger.info("machine account created: %s", samba_user)
+        else:
+            logger.error("machine account creation failed for %s: %s", samba_user, result.stderr)
 
 
 def _recover_orphaned_sessions(state_db: StateDB, mount_mgr: MountManager, session_mgr: SessionManager) -> None:

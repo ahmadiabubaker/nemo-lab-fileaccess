@@ -16,6 +16,8 @@ storage:
   base_path: "/srv/labdata"
   quota_soft_mb: 10240     # 10 GB
   quota_hard_mb: 12288     # 12 GB hard limit
+  uid_offset: 10000        # Linux UID = NEMO user_id + uid_offset, to avoid
+                            # colliding with reserved system UIDs (0-999)
 
 sessions:
   mount_base_path: "/mnt/labsessions"   # where bind mounts are created

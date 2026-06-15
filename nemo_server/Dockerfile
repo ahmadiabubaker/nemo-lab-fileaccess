@@ -1,7 +1,7 @@
 FROM nanofab/nemo_splash_pad
 
-# Install requests so our signal handler can POST to the daemon
-RUN pip install requests
+# Install dependencies for our signal handler (POST to the daemon, load plugin_config.yaml)
+RUN pip install requests pyyaml
 
 # Copy our plugin into the container where Python can find it
 COPY ./plugin /nemo/labfiles_plugin

@@ -27,11 +27,13 @@ class UserProvisioner:
         base_path: str = "/srv/labdata",
         quota_soft_mb: int = 10240,
         quota_hard_mb: int = 12288,
+        uid_offset: int = 0,
         dry_run: bool = False,
     ):
         self.base_path = base_path
         self.quota_soft_mb = quota_soft_mb
         self.quota_hard_mb = quota_hard_mb
+        self.uid_offset = uid_offset
         self.dry_run = dry_run
 
     # ------------------------------------------------------------------
@@ -81,6 +83,9 @@ class UserProvisioner:
     def _linux_username(self, user_id: int) -> str:
         return f"u{user_id}"
 
+    def _linux_uid(self, user_id: int) -> int:
+        return user_id + self.uid_offset
+
     def _create_linux_user(self, user_id: int, full_name: str) -> None:
         username = self._linux_username(user_id)
 
@@ -93,7 +98,7 @@ class UserProvisioner:
         cmd = [
             "useradd", "--system", "--no-create-home",
             "--shell", "/usr/sbin/nologin",
-            "--uid", str(user_id),
+            "--uid", str(self._linux_uid(user_id)),
         ]
         if full_name:
             cmd += ["--comment", full_name]
@@ -126,7 +131,8 @@ class UserProvisioner:
         by the user over Nextcloud, even though it is the user's data.
         """
         user_dir = os.path.join(self.base_path, "users", str(user_id))
-        self._run(["setfacl", "-d", "-m", f"u:{user_id}:rwx", user_dir])
+        username = self._linux_username(user_id)
+        self._run(["setfacl", "-d", "-m", f"u:{username}:rwx", user_dir])
         logger.info("provision: set default ACL on %s", user_dir)
 
     def _set_quota(self, user_id: int) -> None:
@@ -134,7 +140,7 @@ class UserProvisioner:
         soft_kb = self.quota_soft_mb * 1024
         hard_kb = self.quota_hard_mb * 1024
         self._run([
-            "setquota", "-u", str(user_id),
+            "setquota", "-u", str(self._linux_uid(user_id)),
             str(soft_kb), str(hard_kb),
             "0", "0",           # inode soft/hard (0 = no limit)
             self.base_path,

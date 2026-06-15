@@ -169,6 +169,15 @@ def handle_provision():
     if not ok:
         return jsonify({"status": "error", "message": f"Provisioning failed for {user_id}"}), 500
 
+    nemo_sync = getattr(current_app, "nemo_sync", None)
+    if nemo_sync is not None:
+        try:
+            nemo_sync.sync_user_now(user_id)
+            audit.log("provision", user_id, None, "sync_memberships", "success")
+        except Exception as e:
+            logger.error("provision: sync_user_now failed for user_id=%s: %s", user_id, e)
+            audit.log("provision", user_id, None, "sync_memberships", "error", reason=str(e))
+
     return jsonify({
         "status": "success",
         "message": f"User {user_id} provisioned",
