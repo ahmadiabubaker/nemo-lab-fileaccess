@@ -1,8 +1,44 @@
 import logging
 import os
+import re
 import subprocess
 
 logger = logging.getLogger(__name__)
+
+
+def sanitize_name(name: str, max_len: int = 40) -> str:
+    """
+    Turn a NEMO account/project name into a safe, readable path component
+    for bind-mount names (and Nextcloud folder labels). Display-layer only —
+    never used to validate or construct a security-relevant path.
+
+    1. Lowercase
+    2. Replace any run of characters outside [a-z0-9] with a single '_'
+    3. Strip leading/trailing '_'
+    4. Truncate to max_len characters
+    5. If empty after the above, fall back to "unnamed"
+    """
+    s = re.sub(r'[^a-z0-9]+', '_', name.lower()).strip('_')
+    s = s[:max_len].strip('_')
+    return s or "unnamed"
+
+
+def bind_mount_name(account_name: str, project_name: str, project_id: int,
+                     max_len: int = 80) -> str:
+    """
+    Build the session-visible bind-mount directory name for a
+    (account, project) pair: lab_shared_{account}_{project}.
+
+    Collisions between two different (account, project) pairs producing the
+    same sanitized name are handled by appending the project's numeric id —
+    display-only disambiguation, never affects the underlying
+    /srv/labdata/groups/account_<id>/project_<id>/ path.
+    """
+    name = f"lab_shared_{sanitize_name(account_name)}_{sanitize_name(project_name)}"
+    if len(name) > max_len:
+        suffix = f"_p{project_id}"
+        name = name[:max_len - len(suffix)] + suffix
+    return name
 
 
 class MountManager:
@@ -10,15 +46,16 @@ class MountManager:
     Manages bind mounts and POSIX ACLs for tool sessions.
 
     On tool_login:
-      - Bind-mounts the user's private dir, lab group dir, and public dir
-        into the machine's session directory under /mnt/labsessions/
+      - Bind-mounts the user's private dir, one dir per (account, project)
+        the user has access to, and the public dir into the machine's
+        session directory under /mnt/labsessions/
       - Grants the machine account temporary POSIX ACL access to the
         underlying source directories
 
     On tool_logout:
-      - Unmounts the three bind mounts
+      - Unmounts all bind mounts created for the session
       - Strips the machine account's ACL entries
-      - Only strips group/public ACLs if this is the user's last active
+      - Only strips project/public ACLs if this is the user's last active
         session (another machine may still need them)
     """
 
@@ -36,20 +73,24 @@ class MountManager:
     # Public API
     # ------------------------------------------------------------------
 
-    def mount(self, user_id: str, machine_id: str, group_id: str, machine_account: str) -> bool:
+    def mount(self, user_id: int, machine_id: str, projects: list[dict],
+              machine_account: str) -> bool:
         """
         Called on tool_login. Runs bind mounts and grants ACLs.
+
+        projects: [{"account_id": int, "project_id": int,
+                     "account_name": str, "project_name": str}, ...]
+
         Returns True on success, False if any step fails.
         """
-        logger.info("mount: user=%s machine=%s group=%s", user_id, machine_id, group_id)
+        logger.info("mount: user=%s machine=%s projects=%s", user_id, machine_id,
+                    [p["project_id"] for p in projects])
 
-        src_user = os.path.join(self.base_path, "users", user_id)
-        src_group = os.path.join(self.base_path, "groups", group_id) if group_id else None
+        src_user = os.path.join(self.base_path, "users", str(user_id))
         src_public = os.path.join(self.base_path, "public")
 
         dst_base = os.path.join(self.sessions_path, machine_id)
         dst_user = os.path.join(dst_base, "my_files")
-        dst_group = os.path.join(dst_base, "lab_shared")
         dst_public = os.path.join(dst_base, "public")
 
         try:
@@ -67,17 +108,19 @@ class MountManager:
             # Bind mount public directory
             self._bind_mount(src_public, dst_public)
 
-            # Group directory is optional — only if user belongs to a group
-            if src_group:
-                self._ensure_dir(src_group)
-                self._ensure_dir(dst_group)
-                self._bind_mount(src_group, dst_group)
-
             # Grant POSIX ACLs on source dirs to the machine account
             self._grant_acl(machine_account, "rwx", src_user)
             self._grant_acl(machine_account, "r-x", src_public)
-            if src_group:
-                self._grant_acl(machine_account, "r-x", src_group)
+
+            # One bind mount + ACL per (account, project) the user belongs to
+            for p in projects:
+                src_project = self._project_path(p["account_id"], p["project_id"])
+                dst_name = bind_mount_name(p["account_name"], p["project_name"], p["project_id"])
+                dst_project = os.path.join(dst_base, dst_name)
+
+                self._ensure_dir(dst_project)
+                self._bind_mount(src_project, dst_project)
+                self._grant_acl(machine_account, "r-x", src_project)
 
         except Exception as e:
             logger.error("mount: FAILED user=%s machine=%s: %s", user_id, machine_id, e)
@@ -88,57 +131,60 @@ class MountManager:
 
     def unmount(
         self,
-        user_id: str,
+        user_id: int,
         machine_id: str,
-        group_id: str,
+        projects: list[dict],
         machine_account: str,
         remaining_sessions: list[str],
     ) -> bool:
         """
         Called on tool_logout. Removes bind mounts and strips ACLs.
+
+        projects: [{"account_id": int, "project_id": int,
+                     "account_name": str, "project_name": str}, ...]
         remaining_sessions: list of other machine_ids this user is still
-        logged into. Group/public ACLs are only stripped when this list
+        logged into. Project/public ACLs are only stripped when this list
         is empty — another active session may still need them.
+
         Returns True on success, False if any step fails.
         """
         logger.info(
-            "unmount: user=%s machine=%s group=%s remaining=%s",
-            user_id, machine_id, group_id, remaining_sessions,
+            "unmount: user=%s machine=%s projects=%s remaining=%s",
+            user_id, machine_id, [p["project_id"] for p in projects], remaining_sessions,
         )
 
-        src_user = os.path.join(self.base_path, "users", user_id)
-        src_group = os.path.join(self.base_path, "groups", group_id) if group_id else None
+        src_user = os.path.join(self.base_path, "users", str(user_id))
         src_public = os.path.join(self.base_path, "public")
 
         dst_base = os.path.join(self.sessions_path, machine_id)
         dst_user = os.path.join(dst_base, "my_files")
-        dst_group = os.path.join(dst_base, "lab_shared")
         dst_public = os.path.join(dst_base, "public")
 
         try:
             self._unmount(dst_user)
             self._unmount(dst_public)
-            if src_group:
-                self._unmount(dst_group)
-
-            # Remove the empty mount-point directories so SMB clients see nothing
             self._remove_dir(dst_user)
             self._remove_dir(dst_public)
-            if src_group:
-                self._remove_dir(dst_group)
+
+            for p in projects:
+                dst_name = bind_mount_name(p["account_name"], p["project_name"], p["project_id"])
+                dst_project = os.path.join(dst_base, dst_name)
+                self._unmount(dst_project)
+                self._remove_dir(dst_project)
 
             # Always strip this machine account's ACL on the user's private dir
             self._strip_acl(machine_account, src_user)
 
-            # Only strip group/public ACLs if no other sessions are active
+            # Only strip project/public ACLs if no other sessions are active
             # for this user — another machine may still need them
             if not remaining_sessions:
                 self._strip_acl(machine_account, src_public)
-                if src_group:
-                    self._strip_acl(machine_account, src_group)
+                for p in projects:
+                    src_project = self._project_path(p["account_id"], p["project_id"])
+                    self._strip_acl(machine_account, src_project)
             else:
                 logger.info(
-                    "unmount: keeping group/public ACLs — user=%s still active on %s",
+                    "unmount: keeping project/public ACLs — user=%s still active on %s",
                     user_id, remaining_sessions,
                 )
 
@@ -148,6 +194,13 @@ class MountManager:
 
         logger.info("unmount: complete user=%s machine=%s", user_id, machine_id)
         return True
+
+    # ------------------------------------------------------------------
+    # Path helpers
+    # ------------------------------------------------------------------
+
+    def _project_path(self, account_id: int, project_id: int) -> str:
+        return os.path.join(self.base_path, "groups", f"account_{account_id}", f"project_{project_id}")
 
     # ------------------------------------------------------------------
     # Filesystem helpers
@@ -203,7 +256,7 @@ class MountManager:
     def _run(self, cmd: list[str]) -> subprocess.CompletedProcess:
         """
         Never uses shell=True — all arguments passed as a list to prevent
-        injection via crafted user_id or machine_id values.
+        injection via crafted user_id, machine_id, or project values.
         """
         if self.dry_run:
             logger.info("mount [DRY RUN]: %s", " ".join(cmd))
