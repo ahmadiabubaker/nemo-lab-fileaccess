@@ -67,6 +67,14 @@ class StateDB:
                     FOREIGN KEY (project_id) REFERENCES projects(project_id)
                 )
             """)
+            self._conn.execute("""
+                CREATE TABLE IF NOT EXISTS users (
+                    user_id     INTEGER PRIMARY KEY,
+                    username    TEXT NOT NULL,
+                    full_name   TEXT NOT NULL DEFAULT '',
+                    updated_at  TEXT NOT NULL
+                )
+            """)
             self._conn.commit()
 
     def _now(self) -> str:
@@ -135,6 +143,27 @@ class StateDB:
     # ------------------------------------------------------------------
     # accounts / projects / memberships (maintained by NemoSync)
     # ------------------------------------------------------------------
+
+    def upsert_user(self, user_id: int, username: str, full_name: str = "") -> None:
+        with self._lock:
+            self._conn.execute(
+                """
+                INSERT INTO users (user_id, username, full_name, updated_at)
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT(user_id) DO UPDATE SET
+                    username=excluded.username,
+                    full_name=excluded.full_name,
+                    updated_at=excluded.updated_at
+                """,
+                (user_id, username, full_name, self._now()),
+            )
+            self._conn.commit()
+
+    def get_username(self, user_id: int) -> str:
+        row = self._conn.execute(
+            "SELECT username FROM users WHERE user_id=?", (user_id,)
+        ).fetchone()
+        return row["username"] if row else f"u{user_id}"
 
     def upsert_account(self, account_id: int, name: str) -> None:
         with self._lock:

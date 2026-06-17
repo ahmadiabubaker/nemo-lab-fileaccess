@@ -70,12 +70,13 @@ def handle_mount():
 
     projects = state_db.get_memberships(user_id)
     project_ids = [p["project_id"] for p in projects]
+    username = state_db.get_username(user_id)
 
     state_db.open_session(user_id, machine_id, project_ids)
     session_mgr.add(user_id, machine_id)
 
     machine_account = f"{machine_id}_machine"
-    ok = mount_mgr.mount(user_id=user_id, machine_id=machine_id,
+    ok = mount_mgr.mount(user_id=user_id, username=username, machine_id=machine_id,
                           projects=projects, machine_account=machine_account)
     if not ok:
         logger.error("mount: filesystem ops failed user=%s machine=%s", user_id, machine_id)
@@ -126,11 +127,12 @@ def handle_unmount():
 
     all_projects = state_db.get_projects()
     projects = [p for p in all_projects if p["project_id"] in project_ids]
+    username = state_db.get_username(user_id)
 
     # The actual unmount (and session_manager.remove/close_session) runs in a
     # background thread via IdleMonitor, which waits for active write handles
     # to clear before unmounting and re-checks for a ghost (re-login) session.
-    idle_monitor.start_unmount(user_id, machine_id, projects)
+    idle_monitor.start_unmount(user_id, machine_id, projects, username=username)
 
     audit.log("tool_logout", user_id, machine_id, "unmount", "queued",
               session_id=session_id, project_ids=project_ids)
@@ -160,9 +162,13 @@ def handle_provision():
         return jsonify({"status": "error", "message": str(e)}), 400
 
     full_name = data.get("full_name", "")
+    username = data.get("username", f"u{user_id}")
 
     provisioner = current_app.user_provisioner
     ok = provisioner.provision(user_id=user_id, full_name=full_name)
+
+    if ok:
+        current_app.state_db.upsert_user(user_id, username, full_name)
 
     audit.log("provision", user_id, None, "provision", "success" if ok else "error", full_name=full_name)
 

@@ -31,7 +31,8 @@ class IdleMonitor:
         self.max_idle_timeout_seconds = max_idle_timeout_seconds
         self.audit_logger = audit_logger
 
-    def start_unmount(self, user_id: int, machine_id: str, projects: list[dict]) -> None:
+    def start_unmount(self, user_id: int, machine_id: str, projects: list[dict],
+                      username: str = "") -> None:
         """
         Launches wait_and_unmount() in a background thread. Does not block.
 
@@ -40,12 +41,13 @@ class IdleMonitor:
         """
         thread = threading.Thread(
             target=self.wait_and_unmount,
-            args=(user_id, machine_id, projects),
+            args=(user_id, machine_id, projects, username),
             daemon=True,
         )
         thread.start()
 
-    def wait_and_unmount(self, user_id: int, machine_id: str, projects: list[dict]) -> bool:
+    def wait_and_unmount(self, user_id: int, machine_id: str, projects: list[dict],
+                         username: str = "") -> bool:
         """
         Blocks (in its own thread) until it is safe to unmount, then unmounts.
         Returns True if the unmount completed, False if aborted (ghost session).
@@ -103,7 +105,7 @@ class IdleMonitor:
         remaining = self.session_manager.get_machines(user_id)
 
         ok = self.mount_manager.unmount(
-            user_id=user_id, machine_id=machine_id, projects=projects,
+            user_id=user_id, username=username, machine_id=machine_id, projects=projects,
             machine_account=machine_account, remaining_sessions=remaining,
         )
         if not ok:

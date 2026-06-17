@@ -4,6 +4,9 @@ networks:
   labfiles_net:
     driver: bridge
 
+volumes:
+  nemo_db:
+
 services:
   nemo:
     build:
@@ -16,3 +19,5 @@ services:
       - EXTRA_SETTINGS_FILE=/opt/nemo/labfiles_settings.py
       - LABFILES_DAEMON_URL=http://192.168.1.198:5000
       - LABFILES_API_KEY=dev_key
+    volumes:
+      - nemo_db:/nemo/db

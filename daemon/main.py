@@ -119,8 +119,9 @@ def _recover_orphaned_sessions(state_db: StateDB, mount_mgr: MountManager, sessi
                         session["user_id"], session["machine_id"], session["status"])
         projects = [p for p in all_projects if p["project_id"] in session["project_ids"]]
         machine_account = f"{session['machine_id']}_machine"
+        username = state_db.get_username(session["user_id"])
         mount_mgr.unmount(
-            session["user_id"], session["machine_id"],
+            session["user_id"], username, session["machine_id"],
             projects, machine_account, remaining_sessions=[],
         )
         session_mgr.remove(session["user_id"], session["machine_id"])

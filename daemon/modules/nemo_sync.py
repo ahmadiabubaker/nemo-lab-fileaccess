@@ -119,10 +119,13 @@ class NemoSync:
         for user in users:
             user_id = user["id"]
             username = f"u{user_id}"
+            full_name = f"{user.get('first_name', '')} {user.get('last_name', '')}".strip()
+            nemo_username = user.get("username", username)
+
+            self.state_db.upsert_user(user_id, nemo_username, full_name)
 
             result = self._run(["id", username], check=False)
             if result.returncode != 0:
-                full_name = f"{user.get('first_name', '')} {user.get('last_name', '')}".strip()
                 logger.info("NemoSync: provisioning new user %s (id=%s)", username, user_id)
                 ok = self.user_provisioner.provision(user_id=user_id, full_name=full_name)
                 if self.audit_logger:
